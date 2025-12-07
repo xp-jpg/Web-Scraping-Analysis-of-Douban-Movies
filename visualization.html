@@ -1,0 +1,1547 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>豆瓣电影Top250可视化分析</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@300;400;500;700&display=swap" rel="stylesheet">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Noto Sans SC', sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            color: #333;
+            overflow-x: hidden;
+        }
+        
+        /* 动态背景效果 */
+        body::before {
+            content: '';
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: radial-gradient(circle at 20% 80%, rgba(255, 107, 107, 0.1) 0%, transparent 50%),
+                        radial-gradient(circle at 80% 20%, rgba(78, 205, 196, 0.1) 0%, transparent 50%),
+                        radial-gradient(circle at 40% 40%, rgba(255, 209, 102, 0.05) 0%, transparent 50%),
+                        radial-gradient(circle at 60% 60%, rgba(6, 214, 160, 0.05) 0%, transparent 50%);
+            animation: float 20s ease-in-out infinite;
+            z-index: -1;
+        }
+        
+        @keyframes float {
+            0%, 100% {
+                transform: translateY(0px) rotate(0deg);
+            }
+            25% {
+                transform: translateY(-20px) rotate(1deg);
+            }
+            50% {
+                transform: translateY(0px) rotate(0deg);
+            }
+            75% {
+                transform: translateY(20px) rotate(-1deg);
+            }
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 50px;
+            color: white;
+            padding: 40px 20px;
+            position: relative;
+        }
+
+        .header h1 {
+            font-size: 3.5rem;
+            font-weight: 700;
+            margin-bottom: 15px;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.3),
+                        0 0 20px rgba(255, 255, 255, 0.2);
+            background: linear-gradient(45deg, #fff, #f0f0f0);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            animation: titlePulse 3s ease-in-out infinite;
+            position: relative;
+            z-index: 1;
+        }
+
+        .header p {
+            font-size: 1.3rem;
+            opacity: 0.95;
+            text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.3);
+            background: linear-gradient(45deg, #fff, rgba(255, 255, 255, 0.8));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            animation: subtitleFade 4s ease-in-out infinite;
+        }
+
+        @keyframes titlePulse {
+            0%, 100% {
+                transform: scale(1);
+                text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.3),
+                            0 0 20px rgba(255, 255, 255, 0.2);
+            }
+            50% {
+                transform: scale(1.02);
+                text-shadow: 2px 2px 8px rgba(0, 0, 0, 0.4),
+                            0 0 30px rgba(255, 255, 255, 0.3);
+            }
+        }
+
+        @keyframes subtitleFade {
+            0%, 100% {
+                opacity: 0.95;
+            }
+            50% {
+                opacity: 0.8;
+            }
+        }
+
+        /* 装饰性元素 */
+        .header::before,
+        .header::after {
+            content: '';
+            position: absolute;
+            top: 50%;
+            width: 100px;
+            height: 3px;
+            background: linear-gradient(to right, transparent, rgba(255, 255, 255, 0.5), transparent);
+        }
+
+        .header::before {
+            left: 0;
+            transform: translateY(-50%);
+        }
+
+        .header::after {
+            right: 0;
+            transform: translateY(-50%);
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+            gap: 25px;
+            margin-bottom: 50px;
+        }
+
+        .stat-card {
+            background: rgba(255, 255, 255, 0.98);
+            padding: 30px 25px;
+            border-radius: 20px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12),
+                        0 1px 3px rgba(0, 0, 0, 0.08);
+            backdrop-filter: blur(15px);
+            text-align: center;
+            transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+            position: relative;
+            overflow: hidden;
+            border: 1px solid rgba(255, 255, 255, 0.3);
+        }
+
+        .stat-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(135deg, 
+                        transparent 0%, 
+                        rgba(255, 255, 255, 0.1) 30%, 
+                        rgba(255, 255, 255, 0.2) 50%, 
+                        rgba(255, 255, 255, 0.1) 70%, 
+                        transparent 100%);
+            transform: translateX(-100%);
+            transition: transform 0.6s ease;
+            z-index: 0;
+        }
+
+        .stat-card::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 8px;
+            background: linear-gradient(90deg, var(--card-color), var(--card-color) 50%, transparent);
+            opacity: 0;
+            transform: scaleX(0);
+            transition: all 0.4s ease;
+            z-index: 1;
+        }
+
+        .stat-card:hover {
+            transform: translateY(-10px) scale(1.03);
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.2),
+                        0 2px 10px rgba(0, 0, 0, 0.1);
+        }
+
+        .stat-card:hover::before {
+            transform: translateX(100%);
+        }
+
+        .stat-card:hover::after {
+            opacity: 1;
+            transform: scaleX(1);
+        }
+
+        /* 为不同卡片设置不同的主题色和图标 */
+        .stat-card:nth-child(1) {
+            --card-color: #FF6B6B;
+        }
+
+        .stat-card:nth-child(2) {
+            --card-color: #4ECDC4;
+        }
+
+        .stat-card:nth-child(3) {
+            --card-color: #FFD166;
+        }
+
+        .stat-card:nth-child(4) {
+            --card-color: #06D6A0;
+        }
+
+        /* 交互控制区域样式 */
+        .controls {
+            display: flex;
+            justify-content: center;
+            gap: 15px;
+            margin: 30px 0;
+            flex-wrap: wrap;
+        }
+
+        .btn {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 12px;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.15);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #FF6B6B, #EF476F);
+            color: white;
+        }
+
+        .btn-secondary {
+            background: linear-gradient(135deg, #4ECDC4, #118AB2);
+            color: white;
+        }
+
+        .btn:hover {
+            transform: translateY(-3px) scale(1.05);
+            box-shadow: 0 8px 25px rgba(0, 0, 0, 0.25);
+        }
+
+        .btn:active {
+            transform: translateY(1px) scale(0.98);
+        }
+
+        /* 响应式按钮样式 */
+        @media (max-width: 480px) {
+            .btn {
+                padding: 10px 20px;
+                font-size: 0.9rem;
+            }
+        }
+
+        .stat-number {
+            font-size: 3rem;
+            font-weight: 800;
+            color: var(--card-color);
+            margin-bottom: 8px;
+            text-shadow: 0 3px 8px rgba(0, 0, 0, 0.15);
+            position: relative;
+            z-index: 1;
+            animation: numberGlow 3s ease-in-out infinite;
+        }
+
+        @keyframes numberGlow {
+            0%, 100% {
+                filter: drop-shadow(0 0 5px rgba(0, 0, 0, 0.1));
+            }
+            50% {
+                filter: drop-shadow(0 0 10px var(--card-color)) drop-shadow(0 0 20px var(--card-color));
+            }
+        }
+
+        .stat-label {
+            font-size: 1.1rem;
+            color: #555;
+            font-weight: 600;
+            position: relative;
+            z-index: 1;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .charts-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(520px, 1fr));
+            gap: 35px;
+            margin-bottom: 40px;
+        }
+
+        .chart-container {
+            background: rgba(255, 255, 255, 0.98);
+            padding: 35px;
+            border-radius: 25px;
+            box-shadow: 0 12px 48px rgba(0, 0, 0, 0.12),
+                        0 2px 8px rgba(0, 0, 0, 0.08);
+            backdrop-filter: blur(20px);
+            transition: all 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+            position: relative;
+            overflow: hidden;
+            border: 1px solid rgba(255, 255, 255, 0.4);
+        }
+
+        .chart-container::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 10px;
+            background: linear-gradient(90deg, 
+                        var(--card-color, #FF6B6B), 
+                        var(--card-color, #FF6B6B) 33%, 
+                        #4ECDC4 33%, 
+                        #4ECDC4 66%, 
+                        #FFD166 66%, 
+                        #FFD166);
+            opacity: 0;
+            transform: scaleX(0);
+            transition: all 0.4s ease;
+        }
+
+        .chart-container::after {
+            content: '';
+            position: absolute;
+            top: -50%;
+            left: -50%;
+            width: 200%;
+            height: 200%;
+            background: linear-gradient(45deg, 
+                        transparent 0%, 
+                        rgba(255, 255, 255, 0.1) 30%, 
+                        rgba(255, 255, 255, 0.2) 50%, 
+                        rgba(255, 255, 255, 0.1) 70%, 
+                        transparent 100%);
+            transform: rotate(45deg);
+            opacity: 0;
+            transition: all 0.6s ease;
+        }
+
+        .chart-container:hover {
+            transform: translateY(-8px) scale(1.01);
+            box-shadow: 0 20px 70px rgba(0, 0, 0, 0.18),
+                        0 4px 12px rgba(0, 0, 0, 0.12);
+        }
+
+        .chart-container:hover::before {
+            opacity: 1;
+            transform: scaleX(1);
+        }
+
+        .chart-container:hover::after {
+            opacity: 1;
+            animation: shimmer 1.5s ease-in-out;
+        }
+
+        @keyframes shimmer {
+            0% {
+                transform: translateX(-100%) translateY(-100%) rotate(45deg);
+            }
+            100% {
+                transform: translateX(100%) translateY(100%) rotate(45deg);
+            }
+        }
+
+        .chart-title {
+            font-size: 1.5rem;
+            font-weight: 600;
+            margin-bottom: 20px;
+            color: #333;
+            text-align: center;
+        }
+
+        .chart-wrapper {
+            position: relative;
+            height: 400px;
+        }
+
+        /* 响应式设计 - 针对不同设备尺寸优化 */
+        @media (max-width: 1024px) {
+            .charts-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .chart-container {
+                padding: 25px;
+            }
+        }
+        
+        @media (max-width: 768px) {
+            .container {
+                padding: 15px;
+            }
+            
+            .header h1 {
+                font-size: 2rem;
+            }
+            
+            .header p {
+                font-size: 1rem;
+            }
+            
+            .stats-grid {
+                grid-template-columns: repeat(2, 1fr);
+                gap: 15px;
+            }
+            
+            .stat-card {
+                padding: 20px;
+            }
+            
+            .stat-number {
+                font-size: 2rem;
+            }
+            
+            .chart-container {
+                padding: 20px;
+            }
+            
+            .chart-title {
+                font-size: 1.3rem;
+            }
+            
+            /* 调整图表大小以适应移动设备 */
+            .chart-wrapper {
+                height: 300px;
+            }
+        }
+        
+        @media (max-width: 480px) {
+            .header h1 {
+                font-size: 1.8rem;
+            }
+            
+            .stats-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            /* 在小屏幕上隐藏数据标签以避免拥挤 */
+            .chart-container .chartjs-datalabels {
+                display: none;
+            }
+        }
+
+        /* 加载动画 */
+        .loading {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 200px;
+            font-size: 1.2rem;
+            color: #666;
+        }
+
+        /* 自定义滚动条 */
+        ::-webkit-scrollbar {
+            width: 10px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: rgba(255, 255, 255, 0.1);
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.3);
+            border-radius: 5px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: rgba(255, 255, 255, 0.5);
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🎬 豆瓣电影Top250可视化分析</h1>
+            <p>探索电影世界的精彩数据</p>
+        </div>
+
+        <!-- 交互控制区域 -->
+        <div class="controls">
+            <button id="updateBtn" class="btn btn-primary">🔄 更新数据</button>
+            <button id="toggleChartsBtn" class="btn btn-secondary">📊 切换图表视图</button>
+        </div>
+
+        <div class="stats-grid">
+            <div class="stat-card">
+                <div class="stat-number" id="totalMovies">250</div>
+                <div class="stat-label">总电影数</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-number" id="avgRating">9.0</div>
+                <div class="stat-label">平均评分</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-number" id="maxRating">9.7</div>
+                <div class="stat-label">最高评分</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-number" id="yearRange">87</div>
+                <div class="stat-label">年份跨度</div>
+            </div>
+        </div>
+
+        <div class="charts-grid">
+            <div class="chart-container">
+                <div class="chart-title">⭐ 评分分布</div>
+                <div class="chart-wrapper">
+                    <canvas id="ratingDistributionChart"></canvas>
+                </div>
+            </div>
+
+            <div class="chart-container">
+                <div class="chart-title">📅 每年入选影片数量</div>
+                <div class="chart-wrapper">
+                    <canvas id="yearDistributionChart"></canvas>
+                </div>
+            </div>
+
+            <div class="chart-container">
+                <div class="chart-title">🎭 电影类型分布</div>
+                <div class="chart-wrapper">
+                    <canvas id="genreDistributionChart"></canvas>
+                </div>
+            </div>
+
+            <div class="chart-container">
+                <div class="chart-title">📊 评分与评价人数关系</div>
+                <div class="chart-wrapper">
+                    <canvas id="ratingVsCountChart"></canvas>
+                </div>
+            </div>
+
+            <div class="chart-container">
+                <div class="chart-title">🏆 评分最高的Top10电影</div>
+                <div class="chart-wrapper">
+                    <canvas id="topMoviesChart"></canvas>
+                </div>
+            </div>
+
+            <div class="chart-container">
+                <div class="chart-title">📈 年代评分趋势</div>
+                <div class="chart-wrapper">
+                    <canvas id="decadeRatingChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 真实数据将从JSON文件加载
+        let movieData = {};
+        
+        // 从JSON文件加载数据
+        async function loadMovieData() {
+            try {
+                const response = await fetch('movie_data.json');
+                movieData = await response.json();
+                console.log('数据加载成功:', movieData);
+                return true;
+            } catch (error) {
+                console.log('使用模拟数据:', error);
+                // 使用模拟数据作为备份
+                movieData = {
+                    ratingDistribution: [
+                        { rating: '8.0-8.4', count: 25 },
+                        { rating: '8.5-8.9', count: 65 },
+                        { rating: '9.0-9.4', count: 120 },
+                        { rating: '9.5-9.9', count: 40 }
+                    ],
+                    yearDistribution: [
+                        { year: 1994, count: 7 },
+                        { year: 1999, count: 8 },
+                        { year: 2001, count: 6 },
+                        { year: 2003, count: 5 },
+                        { year: 2004, count: 7 },
+                        { year: 2006, count: 8 },
+                        { year: 2008, count: 9 },
+                        { year: 2010, count: 7 },
+                        { year: 2014, count: 6 },
+                        { year: 2019, count: 5 }
+                    ],
+                    genreDistribution: [
+                        { genre: '剧情', count: 180 },
+                        { genre: '爱情', count: 95 },
+                        { genre: '喜剧', count: 70 },
+                        { genre: '科幻', count: 55 },
+                        { genre: '犯罪', count: 50 },
+                        { genre: '动画', count: 45 },
+                        { genre: '冒险', count: 40 },
+                        { genre: '悬疑', count: 35 }
+                    ],
+                    ratingVsCount: [
+                        { rating: 9.7, count: 2200000 },
+                        { rating: 9.6, count: 1800000 },
+                        { rating: 9.5, count: 2000000 },
+                        { rating: 9.4, count: 1500000 },
+                        { rating: 9.3, count: 1200000 },
+                        { rating: 9.2, count: 1000000 },
+                        { rating: 9.1, count: 900000 },
+                        { rating: 9.0, count: 800000 },
+                        { rating: 8.9, count: 700000 },
+                        { rating: 8.8, count: 600000 }
+                    ],
+                    topMovies: [
+                        { title: '肖申克的救赎', rating: 9.7, year: 1994 },
+                        { title: '霸王别姬', rating: 9.6, year: 1993 },
+                        { title: '阿甘正传', rating: 9.5, year: 1994 },
+                        { title: '泰坦尼克号', rating: 9.4, year: 1997 },
+                        { title: '这个杀手不太冷', rating: 9.4, year: 1994 },
+                        { title: '千与千寻', rating: 9.4, year: 2001 },
+                        { title: '美丽人生', rating: 9.5, year: 1997 },
+                        { title: '星际穿越', rating: 9.4, year: 2014 },
+                        { title: '盗梦空间', rating: 9.4, year: 2010 },
+                        { title: '楚门的世界', rating: 9.3, year: 1998 }
+                    ],
+                    decadeRating: [
+                        { decade: '1930s', avgRating: 9.1 },
+                        { decade: '1940s', avgRating: 9.0 },
+                        { decade: '1950s', avgRating: 9.2 },
+                        { decade: '1960s', avgRating: 9.3 },
+                        { decade: '1970s', avgRating: 9.2 },
+                        { decade: '1980s', avgRating: 9.1 },
+                        { decade: '1990s', avgRating: 9.3 },
+                        { decade: '2000s', avgRating: 9.2 },
+                        { decade: '2010s', avgRating: 9.1 }
+                    ]
+                };
+                return false;
+            }
+        };
+
+        // 颜色主题 - 更鲜艳、更现代的配色方案
+        const colors = {
+            primary: '#FF6B6B',
+            secondary: '#4ECDC4',
+            accent1: '#FFD166',
+            accent2: '#06D6A0',
+            accent3: '#118AB2',
+            accent4: '#EF476F',
+            accent5: '#FF9F1C',
+            accent6: '#8338EC',
+            gradient: ['#FF6B6B', '#4ECDC4', '#FFD166', '#06D6A0', '#118AB2', '#EF476F', '#FF9F1C', '#8338EC'],
+            chartColors: [
+                'rgba(255, 107, 107, 0.85)',
+                'rgba(78, 205, 196, 0.85)',
+                'rgba(255, 209, 102, 0.85)',
+                'rgba(6, 214, 160, 0.85)',
+                'rgba(17, 138, 178, 0.85)',
+                'rgba(239, 71, 111, 0.85)',
+                'rgba(255, 159, 28, 0.85)',
+                'rgba(131, 56, 236, 0.85)'
+            ],
+            backgroundGradient: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)'
+        };
+
+        // 初始化所有图表
+        function initCharts() {
+            initRatingDistributionChart();
+            initYearDistributionChart();
+            initGenreDistributionChart();
+            initRatingVsCountChart();
+            initTopMoviesChart();
+            initDecadeRatingChart();
+        }
+
+        // 评分分布图表 - 使用渐变和更现代的样式
+        function initRatingDistributionChart() {
+            const ctx = document.getElementById('ratingDistributionChart').getContext('2d');
+            
+            // 创建渐变
+            const gradient = ctx.createLinearGradient(0, 0, 0, 400);
+            gradient.addColorStop(0, 'rgba(255, 107, 107, 0.9)');
+            gradient.addColorStop(1, 'rgba(255, 107, 107, 0.3)');
+            
+            new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: movieData.ratingDistribution.map(item => item.rating),
+                    datasets: [{
+                        label: '电影数量',
+                        data: movieData.ratingDistribution.map(item => item.count),
+                        backgroundColor: [
+                            'rgba(255, 107, 107, 0.85)',
+                            'rgba(78, 205, 196, 0.85)',
+                            'rgba(255, 209, 102, 0.85)',
+                            'rgba(6, 214, 160, 0.85)'
+                        ],
+                        borderColor: [
+                            'rgba(255, 107, 107, 1)',
+                            'rgba(78, 205, 196, 1)',
+                            'rgba(255, 209, 102, 1)',
+                            'rgba(6, 214, 160, 1)'
+                        ],
+                        borderWidth: 3,
+                        borderRadius: 10,
+                        borderSkipped: false,
+                        barThickness: 70
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            display: false
+                        },
+                        tooltip: {
+                            backgroundColor: 'rgba(0, 0, 0, 0.8)',
+                            padding: 12,
+                            borderRadius: 8,
+                            titleFont: {
+                                size: 14,
+                                weight: 'bold'
+                            },
+                            bodyFont: {
+                                size: 13
+                            },
+                            displayColors: true,
+                            callbacks: {
+                                label: function(context) {
+                                    return `电影数量: ${context.parsed.y}`;
+                                }
+                            }
+                        },
+                        datalabels: {
+                            anchor: 'end',
+                            align: 'top',
+                            color: '#333',
+                            font: {
+                                size: 15,
+                                weight: 'bold'
+                            },
+                            formatter: (value) => `${value}`
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            grid: {
+                                color: 'rgba(0, 0, 0, 0.05)',
+                                drawBorder: false
+                            },
+                            ticks: {
+                                font: {
+                                    size: 12
+                                },
+                                padding: 10
+                            }
+                        },
+                        x: {
+                            grid: {
+                                display: false
+                            },
+                            ticks: {
+                                font: {
+                                    size: 13,
+                                    weight: '500'
+                                },
+                                padding: 15
+                            }
+                        }
+                    },
+                    animation: {
+                        duration: 1500,
+                        easing: 'easeOutElastic(1, .5)'
+                    }
+                },
+                plugins: [ChartDataLabels]
+            });
+        }
+
+        // 年份分布图表 - 使用面积图和渐变效果
+        function initYearDistributionChart() {
+            const ctx = document.getElementById('yearDistributionChart').getContext('2d');
+            
+            // 创建渐变填充
+            const gradient = ctx.createLinearGradient(0, 0, 0, 400);
+            gradient.addColorStop(0, 'rgba(255, 107, 107, 0.4)');
+            gradient.addColorStop(1, 'rgba(255, 107, 107, 0.05)');
+            
+            new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: movieData.yearDistribution.map(item => item.year),
+                    datasets: [{
+                        label: '入选数量',
+                        data: movieData.yearDistribution.map(item => item.count),
+                        borderColor: '#FF6B6B',
+                        backgroundColor: gradient,
+                        borderWidth: 4,
+                        fill: true,
+                        tension: 0.5,
+                        pointBackgroundColor: '#FF6B6B',
+                        pointBorderColor: '#fff',
+                        pointBorderWidth: 3,
+                        pointRadius: 8,
+                        pointHoverRadius: 12,
+                        pointHoverBackgroundColor: '#FF6B6B',
+                        pointHoverBorderColor: '#fff',
+                        pointHoverBorderWidth: 4,
+                        pointShadowColor: 'rgba(255, 107, 107, 0.5)',
+                        pointShadowBlur: 10,
+                        pointShadowOffsetX: 0,
+                        pointShadowOffsetY: 3
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            display: false
+                        },
+                        tooltip: {
+                            backgroundColor: 'rgba(0, 0, 0, 0.85)',
+                            padding: 15,
+                            borderRadius: 10,
+                            titleFont: {
+                                size: 14,
+                                weight: 'bold'
+                            },
+                            bodyFont: {
+                                size: 13
+                            },
+                            callbacks: {
+                                label: function(context) {
+                                    return `入选数量: ${context.parsed.y}`;
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            grid: {
+                                color: 'rgba(0, 0, 0, 0.05)',
+                                drawBorder: false
+                            },
+                            ticks: {
+                                font: {
+                                    size: 12
+                                },
+                                padding: 10
+                            }
+                        },
+                        x: {
+                            grid: {
+                                display: false
+                            },
+                            ticks: {
+                                font: {
+                                    size: 12,
+                                    weight: '500'
+                                },
+                                padding: 15
+                            }
+                        }
+                    },
+                    animation: {
+                        duration: 2000,
+                        easing: 'easeOutQuart'
+                    },
+                    interaction: {
+                        intersect: false,
+                        mode: 'index'
+                    }
+                }
+            });
+        }
+
+        // 类型分布图表 - 使用环形图和更现代的样式
+        function initGenreDistributionChart() {
+            const ctx = document.getElementById('genreDistributionChart').getContext('2d');
+            
+            new Chart(ctx, {
+                type: 'doughnut',
+                data: {
+                    labels: movieData.genreDistribution.map(item => item.genre),
+                    datasets: [{
+                        data: movieData.genreDistribution.map(item => item.count),
+                        backgroundColor: [
+                            'rgba(255, 107, 107, 0.85)',
+                            'rgba(78, 205, 196, 0.85)',
+                            'rgba(255, 209, 102, 0.85)',
+                            'rgba(6, 214, 160, 0.85)',
+                            'rgba(17, 138, 178, 0.85)',
+                            'rgba(239, 71, 111, 0.85)',
+                            'rgba(255, 159, 28, 0.85)',
+                            'rgba(131, 56, 236, 0.85)'
+                        ],
+                        borderColor: '#fff',
+                        borderWidth: 4,
+                        hoverOffset: 20,
+                        hoverBackgroundColor: [
+                            'rgba(255, 107, 107, 1)',
+                            'rgba(78, 205, 196, 1)',
+                            'rgba(255, 209, 102, 1)',
+                            'rgba(6, 214, 160, 1)',
+                            'rgba(17, 138, 178, 1)',
+                            'rgba(239, 71, 111, 1)',
+                            'rgba(255, 159, 28, 1)',
+                            'rgba(131, 56, 236, 1)'
+                        ]
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            position: 'right',
+                            labels: {
+                                padding: 25,
+                                font: {
+                                    size: 13,
+                                    weight: '500'
+                                },
+                                usePointStyle: true,
+                                padding: 20,
+                                boxWidth: 12
+                            }
+                        },
+                        tooltip: {
+                            backgroundColor: 'rgba(0, 0, 0, 0.85)',
+                            padding: 15,
+                            borderRadius: 10,
+                            titleFont: {
+                                size: 14,
+                                weight: 'bold'
+                            },
+                            bodyFont: {
+                                size: 13
+                            },
+                            callbacks: {
+                                label: function(context) {
+                                    const total = context.dataset.data.reduce((a, b) => a + b, 0);
+                                    const value = context.parsed;
+                                    const percentage = Math.round((value / total) * 100);
+                                    return `${context.label}: ${value} 部 (${percentage}%)`;
+                                }
+                            }
+                        },
+                        datalabels: {
+                            color: '#fff',
+                            font: {
+                                size: 15,
+                                weight: 'bold'
+                            },
+                            formatter: (value, ctx) => {
+                                const total = ctx.dataset.data.reduce((a, b) => a + b, 0);
+                                const percentage = Math.round((value / total) * 100);
+                                return `${percentage}%`;
+                            }
+                        }
+                    },
+                    cutout: '70%',
+                    animation: {
+                        animateScale: true,
+                        animateRotate: true,
+                        duration: 1500,
+                        easing: 'easeOutElastic(1, .5)'
+                    },
+                    hover: {
+                        mode: 'nearest',
+                        intersect: true
+                    }
+                },
+                plugins: [ChartDataLabels]
+            });
+        }
+
+        // 评分与评价人数关系图表 - 增强交互性和视觉效果
+        function initRatingVsCountChart() {
+            const ctx = document.getElementById('ratingVsCountChart').getContext('2d');
+            
+            // 创建渐变气泡效果
+            const bubbleGradient = ctx.createRadialGradient(0, 0, 0, 0, 0, 10);
+            bubbleGradient.addColorStop(0, 'rgba(255, 255, 255, 0.9)');
+            bubbleGradient.addColorStop(0.5, colors.secondary);
+            bubbleGradient.addColorStop(1, colors.secondary.replace('0.85', '0.5'));
+            
+            new Chart(ctx, {
+                type: 'scatter',
+                data: {
+                    datasets: [{
+                        label: '电影',
+                        data: movieData.ratingVsCount.map(item => ({
+                            x: item.rating,
+                            y: item.count / 10000 // 转换为万人
+                        })),
+                        backgroundColor: colors.secondary,
+                        borderColor: colors.secondary,
+                        borderWidth: 3,
+                        radius: 10,
+                        hoverRadius: 16,
+                        hoverBackgroundColor: colors.primary,
+                        hoverBorderColor: colors.primary,
+                        hoverBorderWidth: 4,
+                        pointShadowColor: 'rgba(0, 0, 0, 0.3)',
+                        pointShadowBlur: 10,
+                        pointShadowOffsetX: 0,
+                        pointShadowOffsetY: 5
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            display: false
+                        },
+                        tooltip: {
+                            backgroundColor: 'rgba(0, 0, 0, 0.85)',
+                            padding: 15,
+                            borderRadius: 10,
+                            titleFont: {
+                                size: 14,
+                                weight: 'bold'
+                            },
+                            bodyFont: {
+                                size: 13
+                            },
+                            callbacks: {
+                                label: function(context) {
+                                    return [
+                                        `评分: ${context.parsed.x}`,
+                                        `评价人数: ${(context.parsed.y * 10000).toLocaleString()} 人`
+                                    ];
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            title: {
+                                display: true,
+                                text: '评分',
+                                font: {
+                                    size: 14,
+                                    weight: 'bold'
+                                },
+                                color: '#333'
+                            },
+                            grid: {
+                                color: 'rgba(0, 0, 0, 0.05)',
+                                drawBorder: false
+                            },
+                            ticks: {
+                                font: {
+                                    size: 12
+                                },
+                                padding: 10
+                            },
+                            min: 8.5,
+                            max: 10
+                        },
+                        y: {
+                            title: {
+                                display: true,
+                                text: '评价人数（万人）',
+                                font: {
+                                    size: 14,
+                                    weight: 'bold'
+                                },
+                                color: '#333'
+                            },
+                            grid: {
+                                color: 'rgba(0, 0, 0, 0.05)',
+                                drawBorder: false
+                            },
+                            ticks: {
+                                font: {
+                                    size: 12
+                                },
+                                padding: 10,
+                                callback: function(value) {
+                                    return value + '万';
+                                }
+                            }
+                        }
+                    },
+                    animation: {
+                        duration: 2000,
+                        easing: 'easeOutElastic(1, .5)',
+                        onProgress: function(animation) {
+                            const chart = this;
+                            if (animation.currentStep === animation.numSteps - 1) {
+                                // 动画结束时添加一点效果
+                                chart.data.datasets[0].radius = 10;
+                                chart.update('none');
+                            }
+                        }
+                    },
+                    interaction: {
+                        mode: 'point',
+                        intersect: false,
+                        axis: 'xy'
+                    }
+                }
+            });
+        }
+
+        // Top10电影图表 - 使用渐变和增强的视觉效果
+        function initTopMoviesChart() {
+            const ctx = document.getElementById('topMoviesChart').getContext('2d');
+            
+            // 为每个条形创建独特的渐变
+            const createBarGradient = (index, color) => {
+                const gradient = ctx.createLinearGradient(0, 0, 400, 0);
+                gradient.addColorStop(0, color.replace('0.85', '0.6'));
+                gradient.addColorStop(1, color.replace('0.85', '1'));
+                return gradient;
+            };
+            
+            // 获取颜色并创建渐变数组
+            const barGradients = colors.chartColors.map((color, index) => 
+                createBarGradient(index, color)
+            );
+            
+            new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: movieData.topMovies.map(item => item.title),
+                    datasets: [{
+                        label: '评分',
+                        data: movieData.topMovies.map(item => item.rating),
+                        backgroundColor: barGradients,
+                        borderColor: colors.chartColors.map(color => color.replace('0.85', '1')),
+                        borderWidth: 4,
+                        borderRadius: [0, 15, 15, 0],
+                        barThickness: 30,
+                        borderSkipped: false
+                    }]
+                },
+                options: {
+                    indexAxis: 'y',
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            display: false
+                        },
+                        tooltip: {
+                            backgroundColor: 'rgba(0, 0, 0, 0.85)',
+                            padding: 15,
+                            borderRadius: 10,
+                            titleFont: {
+                                size: 14,
+                                weight: 'bold'
+                            },
+                            bodyFont: {
+                                size: 13
+                            },
+                            callbacks: {
+                                label: function(context) {
+                                    const movie = movieData.topMovies[context.dataIndex];
+                                    return [
+                                        `评分: ${movie.rating}`,
+                                        `上映年份: ${movie.year}`
+                                    ];
+                                }
+                            }
+                        },
+                        datalabels: {
+                            anchor: 'end',
+                            align: 'end',
+                            color: '#fff',
+                            font: {
+                                size: 14,
+                                weight: 'bold'
+                            },
+                            backgroundColor: 'rgba(0, 0, 0, 0.7)',
+                            padding: 8,
+                            borderRadius: 6,
+                            formatter: (value) => `${value}`
+                        }
+                    },
+                    scales: {
+                        x: {
+                            beginAtZero: true,
+                            max: 10,
+                            grid: {
+                                color: 'rgba(0, 0, 0, 0.05)',
+                                drawBorder: false
+                            },
+                            ticks: {
+                                font: {
+                                    size: 12,
+                                    weight: '500'
+                                },
+                                padding: 10
+                            }
+                        },
+                        y: {
+                            grid: {
+                                display: false
+                            },
+                            ticks: {
+                                font: {
+                                    size: 12,
+                                    weight: '500'
+                                },
+                                padding: 15
+                            }
+                        }
+                    },
+                    animation: {
+                        duration: 1800,
+                        easing: 'easeOutQuart',
+                        delay: function(context) {
+                            return context.dataIndex * 100; // 逐个动画
+                        },
+                        onProgress: function(animation) {
+                            const chart = this;
+                            animation.animateScale = true;
+                        }
+                    },
+                    hover: {
+                        mode: 'index',
+                        intersect: false,
+                        onHover: function(event, elements) {
+                            if (elements.length) {
+                                event.native.target.style.cursor = 'pointer';
+                            } else {
+                                event.native.target.style.cursor = 'default';
+                            }
+                        }
+                    }
+                },
+                plugins: [ChartDataLabels]
+            });
+        }
+
+        // 年代评分趋势图表 - 使用渐变填充和增强的视觉效果
+        function initDecadeRatingChart() {
+            const ctx = document.getElementById('decadeRatingChart').getContext('2d');
+            
+            // 创建渐变填充
+            const gradient = ctx.createLinearGradient(0, 0, 0, 400);
+            gradient.addColorStop(0, colors.accent4.replace('0.85', '0.5'));
+            gradient.addColorStop(0.5, colors.accent4.replace('0.85', '0.2'));
+            gradient.addColorStop(1, colors.accent4.replace('0.85', '0'));
+            
+            // 创建线条渐变
+            const lineGradient = ctx.createLinearGradient(0, 0, 400, 0);
+            lineGradient.addColorStop(0, colors.accent4.replace('0.85', '0.7'));
+            lineGradient.addColorStop(0.5, colors.accent3.replace('0.85', '0.9'));
+            lineGradient.addColorStop(1, colors.accent4.replace('0.85', '0.7'));
+            
+            new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: movieData.decadeRating.map(item => item.decade),
+                    datasets: [{
+                        label: '平均评分',
+                        data: movieData.decadeRating.map(item => item.avgRating),
+                        borderColor: lineGradient,
+                        backgroundColor: gradient,
+                        borderWidth: 5,
+                        fill: true,
+                        tension: 0.5,
+                        pointBackgroundColor: colors.accent4,
+                        pointBorderColor: '#fff',
+                        pointBorderWidth: 4,
+                        pointRadius: 10,
+                        pointHoverRadius: 16,
+                        pointHoverBackgroundColor: colors.accent3,
+                        pointHoverBorderColor: '#fff',
+                        pointHoverBorderWidth: 5,
+                        pointShadowColor: 'rgba(239, 71, 111, 0.5)',
+                        pointShadowBlur: 15,
+                        pointShadowOffsetX: 0,
+                        pointShadowOffsetY: 5,
+                        pointHoverShadowColor: 'rgba(239, 71, 111, 0.8)',
+                        pointHoverShadowBlur: 20,
+                        pointHoverShadowOffsetX: 0,
+                        pointHoverShadowOffsetY: 8
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            display: false
+                        },
+                        tooltip: {
+                            backgroundColor: 'rgba(0, 0, 0, 0.85)',
+                            padding: 15,
+                            borderRadius: 10,
+                            titleFont: {
+                                size: 14,
+                                weight: 'bold'
+                            },
+                            bodyFont: {
+                                size: 13
+                            },
+                            callbacks: {
+                                label: function(context) {
+                                    return `平均评分: ${context.parsed.y}`;
+                                }
+                            }
+                        },
+                        datalabels: {
+                            anchor: 'center',
+                            align: 'center',
+                            color: '#fff',
+                            font: {
+                                size: 12,
+                                weight: 'bold'
+                            },
+                            formatter: (value) => `${value}`
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: false,
+                            min: 8.5,
+                            max: 9.5,
+                            grid: {
+                                color: 'rgba(0, 0, 0, 0.05)',
+                                drawBorder: false
+                            },
+                            ticks: {
+                                font: {
+                                    size: 12,
+                                    weight: '500'
+                                },
+                                padding: 10,
+                                callback: function(value) {
+                                    return value.toFixed(1);
+                                }
+                            }
+                        },
+                        x: {
+                            grid: {
+                                display: false
+                            },
+                            ticks: {
+                                font: {
+                                    size: 13,
+                                    weight: '500'
+                                },
+                                padding: 15
+                            }
+                        }
+                    },
+                    animation: {
+                        duration: 2500,
+                        easing: 'easeOutQuart',
+                        animateScale: true,
+                        animateRotate: true
+                    },
+                    interaction: {
+                        mode: 'index',
+                        intersect: false,
+                        axis: 'x'
+                    },
+                    hover: {
+                        mode: 'nearest',
+                        intersect: true
+                    }
+                },
+                plugins: [ChartDataLabels]
+            });
+        }
+
+        // 更新统计卡片数据
+        function updateStats() {
+            if (movieData && movieData.topMovies) {
+                document.getElementById('totalMovies').textContent = '250';
+                
+                // 计算平均评分
+                const avgRating = movieData.decadeRating.reduce((sum, item) => sum + item.avgRating, 0) / movieData.decadeRating.length;
+                document.getElementById('avgRating').textContent = avgRating.toFixed(1);
+                
+                // 计算最高评分
+                const maxRating = Math.max(...movieData.topMovies.map(item => item.rating));
+                document.getElementById('maxRating').textContent = maxRating.toFixed(1);
+                
+                // 计算年份跨度
+                const years = movieData.yearDistribution.map(item => item.year);
+                const yearRange = Math.max(...years) - Math.min(...years);
+                document.getElementById('yearRange').textContent = yearRange;
+            } else {
+                // 使用默认值
+                document.getElementById('totalMovies').textContent = '250';
+                document.getElementById('avgRating').textContent = '9.0';
+                document.getElementById('maxRating').textContent = '9.7';
+                document.getElementById('yearRange').textContent = '87';
+            }
+        }
+
+        // 页面加载完成后初始化
+        document.addEventListener('DOMContentLoaded', async function() {
+            await loadMovieData();
+            updateStats();
+            initCharts();
+            
+            // 添加按钮事件监听器
+            addButtonEventListeners();
+        });
+        
+        // 添加按钮事件监听器
+        function addButtonEventListeners() {
+            // 更新数据按钮
+            document.getElementById('updateBtn').addEventListener('click', async function() {
+                await handleUpdateData();
+            });
+            
+            // 切换图表视图按钮
+            document.getElementById('toggleChartsBtn').addEventListener('click', function() {
+                toggleChartView();
+            });
+        }
+        
+        // 处理数据更新
+        async function handleUpdateData() {
+            const updateBtn = document.getElementById('updateBtn');
+            const originalText = updateBtn.textContent;
+            
+            // 显示加载状态
+            updateBtn.textContent = '⏳ 更新中...';
+            updateBtn.disabled = true;
+            updateBtn.style.opacity = '0.7';
+            
+            try {
+                // 添加加载动画效果
+                const chartsGrid = document.querySelector('.charts-grid');
+                chartsGrid.style.opacity = '0.5';
+                chartsGrid.style.transition = 'opacity 0.3s ease';
+                
+                // 重新加载数据
+                await loadMovieData();
+                
+                // 清除现有图表
+                clearCharts();
+                
+                // 更新统计卡片
+                updateStats();
+                
+                // 重新初始化图表
+                initCharts();
+                
+                // 恢复正常状态
+                chartsGrid.style.opacity = '1';
+                updateBtn.textContent = '✅ 更新成功';
+                updateBtn.style.backgroundColor = 'linear-gradient(135deg, #06D6A0, #00B894)';
+                
+                // 延迟恢复按钮原始状态
+                setTimeout(() => {
+                    updateBtn.textContent = originalText;
+                    updateBtn.style.background = 'linear-gradient(135deg, #FF6B6B, #EF476F)';
+                    updateBtn.disabled = false;
+                    updateBtn.style.opacity = '1';
+                }, 1500);
+                
+            } catch (error) {
+                console.error('数据更新失败:', error);
+                updateBtn.textContent = '❌ 更新失败';
+                updateBtn.style.backgroundColor = 'linear-gradient(135deg, #D63031, #B71540)';
+                
+                // 延迟恢复按钮原始状态
+                setTimeout(() => {
+                    updateBtn.textContent = originalText;
+                    updateBtn.style.background = 'linear-gradient(135deg, #FF6B6B, #EF476F)';
+                    updateBtn.disabled = false;
+                    updateBtn.style.opacity = '1';
+                }, 1500);
+            }
+        }
+        
+        // 清除所有图表实例
+        function clearCharts() {
+            // 获取所有图表画布
+            const chartCanvases = document.querySelectorAll('canvas[id$="Chart"]');
+            
+            // 检查并销毁现有图表实例
+            chartCanvases.forEach(canvas => {
+                const chartInstance = Chart.getChart(canvas);
+                if (chartInstance) {
+                    chartInstance.destroy();
+                }
+            });
+        }
+        
+        // 切换图表视图
+        function toggleChartView() {
+            const chartsGrid = document.querySelector('.charts-grid');
+            const toggleBtn = document.getElementById('toggleChartsBtn');
+            
+            // 切换图表布局类
+            if (chartsGrid.classList.contains('charts-list')) {
+                // 切换回网格视图
+                chartsGrid.classList.remove('charts-list');
+                toggleBtn.textContent = '📊 切换图表视图';
+            } else {
+                // 切换到列表视图
+                chartsGrid.classList.add('charts-list');
+                toggleBtn.textContent = '📋 切换网格视图';
+            }
+        }
+        
+        // 添加CSS样式用于列表视图
+        const style = document.createElement('style');
+        style.textContent = `
+            /* 图表列表视图样式 */
+            .charts-grid.charts-list {
+                grid-template-columns: 1fr;
+            }
+            
+            .charts-grid.charts-list .chart-container {
+                transform: scale(0.95);
+                transition: all 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+            }
+            
+            .charts-grid.charts-list .chart-container:hover {
+                transform: scale(0.98) translateY(-5px);
+            }
+        `;
+        document.head.appendChild(style);
+    </script>
+</body>
+</html>
